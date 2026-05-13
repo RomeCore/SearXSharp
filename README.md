@@ -68,6 +68,9 @@ using SearXSharp;
 // Create the manager (you can optionally pass your own ILogger)
 var manager = new SearchEngineManager();
 
+// Register the all available engines
+manager.RegisterEngines(SearchEngines.AllEngines());
+
 // Configure your search
 var query = new SearchQuery
 {
@@ -136,7 +139,7 @@ This project is vibe-coded, remember?
 
 <p align="center">
   <b>Made with ❤️, ☕, and an unhealthy amount of profanity</b><br>
-  <i>If this project saved you money, buy me a coffee. Or don't. I'm not your mom, blyat.</i>
+  <i>If this project saved you money, buy me a coffee. Or don't. I'm not your mom.</i>
 </p>
 
 <p align="center">
