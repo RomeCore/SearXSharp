@@ -8,7 +8,7 @@
 
 		<!-- NuGet metadata -->
 		<PackageId>SearXSharp</PackageId>
-		<Version>1.0.0</Version>
+		<Version>1.0.1</Version>
 		<Authors>RomeCore</Authors>
 		<Company>RomeCore</Company>
 		<Product>SearXSharp</Product>
@@ -34,7 +34,7 @@ Features:
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="AngleSharp" Version="1.0.7" />
+	  <PackageReference Include="AngleSharp" Version="0.17.1" />
 	  <PackageReference Include="System.Text.Json" Version="10.0.8" />
 	</ItemGroup>
 
