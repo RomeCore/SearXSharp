@@ -107,13 +107,13 @@ public class MetaCPANSearchEngine : SearchEngineBase
             {
                 var source = hit.GetProperty("_source");
                 var module = source.GetProperty("documentation").GetString() ?? "";
-                var abstract = source.TryGetProperty("abstract", out var abs) ? abs.GetString() ?? "" : "";
+                var _abstract = source.TryGetProperty("abstract", out var abs) ? abs.GetString() ?? "" : "";
 
                 results.Add(new SearchResult
                 {
                     Url = "https://metacpan.org/pod/" + module,
                     Title = module,
-                    Content = abstract,
+                    Content = _abstract,
                     Engine = Name,
                     Category = SearchCategory.Packages,
                 });

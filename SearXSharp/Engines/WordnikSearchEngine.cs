@@ -92,7 +92,7 @@ public partial class WordnikSearchEngine : SearchEngineBase
                     results.Add(new SearchResult
                     {
                         Url = pageUrl,
-                        Title = $"{query.Query} - {sourceName}",
+                        Title = $"{query} - {sourceName}",
                         Content = content,
                         Source = sourceName,
                         Engine = Name,

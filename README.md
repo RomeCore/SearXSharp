@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-512BD4?logo=dotnet&style=flat-square">
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square">
   <img src="https://img.shields.io/badge/status-vibe--coded-ff69b4?style=flat-square">
-  <img src="https://img.shields.io/badge/engines-21%20and%20counting-blue?style=flat-square">
+  <img src="https://img.shields.io/badge/engines-118%20and%20counting-blue?style=flat-square">
 </p>
 
 ---
