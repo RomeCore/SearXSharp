@@ -1,10 +1,36 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks>net8.0;net10.0</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<LangVersion>Latest</LangVersion>
+
+		<!-- NuGet metadata -->
+		<PackageId>SearXSharp</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>RomeCore</Authors>
+		<Company>RomeCore</Company>
+		<Product>SearXSharp</Product>
+		<Description>SearXSharp - The C#-adapted SearXNG meta-search engine. Vibe-coded for AI applications to avoid paid APIs!
+
+SearXSharp queries multiple search engines simultaneously, merges, deduplicates, and returns clean structured results. No API keys. No paid subscriptions. Just raw scraping power.
+
+Features:
+- 118+ search engines (Google, Bing, DuckDuckGo, YouTube, GitHub, Reddit and many more)
+- Parallel execution across all engines
+- Automatic deduplication and result merging
+- No API keys required
+- Privacy-respecting
+- Easy to use with DI or standalone</Description>
+		<PackageTags>searxng;meta-search;search;web-scraping;searx;csharp;dotnet</PackageTags>
+		<PackageProjectUrl>https://github.com/RomeCore/SearXSharp</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/RomeCore/SearXSharp</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);1591</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
