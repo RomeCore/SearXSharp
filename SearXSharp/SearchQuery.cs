@@ -16,15 +16,21 @@ public class SearchQuery
     /// </summary>
     public int Page { get; init; } = 1;
 
-    /// <summary>
-    /// The search category (general, images, videos, news, etc.).
-    /// </summary>
-    public SearchCategory Category { get; init; } = SearchCategory.General;
+	/// <summary>
+	/// The search category (general, images, videos, news, etc.).
+	/// The <see cref="SearchCategory.General"/> category searches all categories.
+	/// </summary>
+	public SearchCategory Category { get; init; } = SearchCategory.General;
 
-    /// <summary>
-    /// The safe search filtering level.
-    /// </summary>
-    public SafeSearchLevel SafeSearch { get; init; } = SafeSearchLevel.None;
+	/// <summary>
+	/// A list of specific search engines names (e.g. <see cref="ISearchEngine.Name"/>, "google", "bing" etc.) to use for the query. If null, all available engines will be used.
+	/// </summary>
+	public IEnumerable<string>? Engines { get; init; } = null;
+
+	/// <summary>
+	/// The safe search filtering level.
+	/// </summary>
+	public SafeSearchLevel SafeSearch { get; init; } = SafeSearchLevel.None;
 
     /// <summary>
     /// The language/locale for search results (e.g., "en", "ru", "fr").

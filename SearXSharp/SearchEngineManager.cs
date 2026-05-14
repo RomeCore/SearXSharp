@@ -14,18 +14,18 @@ public class SearchEngineManager
     private readonly List<ISearchEngine> _engines = new();
     private readonly ILogger _logger;
 
-	/// <summary>
-	/// Initializes a new instance.
-	/// </summary>
-	public SearchEngineManager()
-	{
+    /// <summary>
+    /// Initializes a new instance.
+    /// </summary>
+    public SearchEngineManager()
+    {
         _logger = EmptyLogger.Instance;
-	}
+    }
 
-	/// <summary>
-	/// Initializes a new instance with a logger.
-	/// </summary>
-	public SearchEngineManager(ILogger logger)
+    /// <summary>
+    /// Initializes a new instance with a logger.
+    /// </summary>
+    public SearchEngineManager(ILogger logger)
     {
         _logger = logger;
     }
@@ -82,8 +82,20 @@ public class SearchEngineManager
         var engineTimings = new ConcurrentBag<EngineTiming>();
         var unresponsiveEngines = new ConcurrentBag<UnresponsiveEngineInfo>();
 
+        // Filter engines based on category if specified
+        var filteredEngines = query.Category == SearchCategory.General
+            ? _engines
+            : _engines.Where(e => e.SupportedCategories.Contains(query.Category));
+
+        // Filter engines based on specific engines if specified
+        if (query.Engines != null)
+        {
+            var hashSet = new HashSet<string>(query.Engines.Select(e => e.ToLowerInvariant()));
+            filteredEngines = filteredEngines.Where(e => hashSet.Contains(e.Name.ToLowerInvariant()));
+        }
+
         // Fire all engine requests in parallel (like SearXNG's threading approach)
-        foreach (var engine in _engines)
+        foreach (var engine in filteredEngines)
         {
             engineTasks.Add(ExecuteEngineSearchAsync(engine, query, engineTimings, unresponsiveEngines, ct));
         }
@@ -129,7 +141,20 @@ public class SearchEngineManager
         var engineSw = Stopwatch.StartNew();
         try
         {
-            var result = await engine.SearchAsync(query, ct);
+            var timeout = TimeSpan.FromSeconds(query.TimeoutSeconds);
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(timeout);
+            ct = cts.Token;
+            var timedTask = engine.SearchAsync(query, ct);
+            var completedTask = await Task.WhenAny(timedTask, Task.Delay(timeout, ct));
+
+            if (completedTask != timedTask)
+			{
+				timings.Add(new EngineTiming(engine.Name, engineSw.ElapsedMilliseconds, 0));
+				unresponsive.Add(new UnresponsiveEngineInfo(engine.Name, "timeout", true));
+                return CreateEmptyResult();
+            }
+            var result = timedTask.Result;
             engineSw.Stop();
 
             timings.Add(new EngineTiming(engine.Name, engineSw.ElapsedMilliseconds, 0));
@@ -139,7 +164,15 @@ public class SearchEngineManager
 
             return result;
         }
-        catch (TaskCanceledException)
+        catch (AggregateException aex) when (aex.InnerExceptions.Any(e => e is OperationCanceledException))
+        {
+            engineSw.Stop();
+            timings.Add(new EngineTiming(engine.Name, engineSw.ElapsedMilliseconds, 0));
+            unresponsive.Add(new UnresponsiveEngineInfo(engine.Name, "timeout", true));
+            _logger.Warning("Engine {Engine} timed out after {ElapsedMs}ms", engine.Name, engineSw.ElapsedMilliseconds);
+            return CreateEmptyResult();
+        }
+        catch (OperationCanceledException)
         {
             engineSw.Stop();
             timings.Add(new EngineTiming(engine.Name, engineSw.ElapsedMilliseconds, 0));
