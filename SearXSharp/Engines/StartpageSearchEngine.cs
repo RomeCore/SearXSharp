@@ -1,5 +1,5 @@
 using SearXSharp.Models;
-using System.Collections.Specialized;
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -62,15 +62,46 @@ public partial class StartpageSearchEngine : SearchEngineBase
         [TimeRange.Year] = "y",
     };
 
+    // Maps SearXNG SafeSearchLevel -> Startpage disable_family_filter cookie value.
+    // Based on SearXNG's safesearch_dict = {0: "1", 1: "0", 2: "0"}.
+    // Startpage's "disable_family_filter": "1" means filter is OFF (allow explicit),
+    // "0" means filter is ON (block explicit).
     private static readonly Dictionary<SafeSearchLevel, string> _safeSearchMap = new()
     {
-        [SafeSearchLevel.None] = "0",
-        [SafeSearchLevel.Moderate] = "1",
-        [SafeSearchLevel.Strict] = "1",
+        [SafeSearchLevel.None] = "1",     // None  (0) -> disable filter (= "1", allow everything)
+        [SafeSearchLevel.Moderate] = "0", // Mod   (1) -> enable filter (= "0")
+        [SafeSearchLevel.Strict] = "0",   // Strict(2) -> enable filter (= "0")
     };
 
     public StartpageSearchEngine() : base() { }
     public StartpageSearchEngine(ILogger logger) : base(logger) { }
+
+    /// <summary>
+    /// Creates an HttpClient without auto-redirect so we can detect CAPTCHA redirects.
+    /// Based on SearXNG's CAPTCHA detection via redirect to /sp/captcha.
+    /// </summary>
+    protected override HttpClient CreateHttpClient()
+    {
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = System.Net.DecompressionMethods.GZip
+                                     | System.Net.DecompressionMethods.Deflate
+                                     | System.Net.DecompressionMethods.Brotli,
+        };
+
+        var client = new HttpClient(handler);
+        client.DefaultRequestHeaders.Add("Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+        client.DefaultRequestHeaders.Add("Accept-Language", "en,en-US;q=0.7,en;q=0.3");
+        client.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br");
+        client.DefaultRequestHeaders.Add("Cache-Control", "no-cache");
+        client.DefaultRequestHeaders.Add("DNT", "1");
+        client.DefaultRequestHeaders.Add("Connection", "keep-alive");
+        client.Timeout = TimeSpan.FromSeconds(Timeout > 0 ? Timeout + 5 : 35);
+
+        return client;
+    }
 
     /// <inheritdoc />
     public override async Task<SearchResultList> SearchAsync(SearchQuery query, CancellationToken ct = default)
@@ -89,6 +120,11 @@ public partial class StartpageSearchEngine : SearchEngineBase
                 return CreateErrorResult("captcha_required");
             }
 
+            // Use language from query or fallback to English
+            var lang = string.IsNullOrEmpty(query.Language) || query.Language == "auto"
+                ? "en"
+                : query.Language;
+
             // Build form data
             var formData = new Dictionary<string, string>
             {
@@ -99,8 +135,8 @@ public partial class StartpageSearchEngine : SearchEngineBase
                 ["abp"] = "1",
                 ["abd"] = "1",
                 ["abe"] = "1",
-                ["language"] = "en",
-                ["lui"] = "en",
+                ["language"] = lang,
+                ["lui"] = lang,
             };
 
             if (query.TimeRange.HasValue && _timeRangeMap.TryGetValue(query.TimeRange.Value, out var tr))
@@ -112,22 +148,22 @@ public partial class StartpageSearchEngine : SearchEngineBase
                 formData["segment"] = "startpage.udog";
             }
 
-            // Build cookie
+            // Build cookie with language/region support
             var cookieParts = new List<string>
             {
-                $"date_timeEEEworld",
-                $"disable_family_filterEEE{_safeSearchMap.GetValueOrDefault(query.SafeSearch, "0")}",
-                $"disable_open_in_new_windowEEE0",
-                $"enable_post_methodEEE1",
-                $"enable_proxy_safety_suggestEEE1",
-                $"enable_stay_controlEEE1",
-                $"instant_answersEEE1",
-                $"lang_homepageEEEs/device/en/",
-                $"num_of_resultsEEE10",
-                $"suggestionsEEE1",
-                $"wt_unitEEEcelsius",
-                $"languageEEEen",
-                $"language_uiEEEen",
+                "date_timeEEEworld",
+                $"disable_family_filterEEE{_safeSearchMap.GetValueOrDefault(query.SafeSearch, "1")}",
+                "disable_open_in_new_windowEEE0",
+                "enable_post_methodEEE1",
+                "enable_proxy_safety_suggestEEE1",
+                "enable_stay_controlEEE1",
+                "instant_answersEEE1",
+                $"lang_homepageEEEs/device/{lang}/",
+                "num_of_resultsEEE10",
+                "suggestionsEEE1",
+                "wt_unitEEEcelsius",
+                $"languageEEE{lang}",
+                $"language_uiEEE{lang}",
                 $"search_results_regionEEEen-US",
             };
             var cookieValue = "N1N" + string.Join("N1N", cookieParts);
@@ -138,9 +174,40 @@ public partial class StartpageSearchEngine : SearchEngineBase
             request.Headers.TryAddWithoutValidation("Cookie", $"preferences={Uri.EscapeDataString(cookieValue)}");
 
             var response = await SendRequestAsync(request, ct);
-            response.EnsureSuccessStatusCode();
+
+            // Check for CAPTCHA redirect (SearXNG checks Location header for /sp/captcha)
+            if (response.StatusCode == HttpStatusCode.Found
+                || response.StatusCode == HttpStatusCode.Redirect
+                || response.StatusCode == HttpStatusCode.RedirectMethod)
+            {
+                var location = response.Headers.Location?.ToString() ?? "";
+                if (location.Contains("/sp/captcha", StringComparison.OrdinalIgnoreCase)
+                    || location.Contains("captcha", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.Warning("{Engine}: CAPTCHA redirect detected: {Location}", Name, location);
+                    return CreateErrorResult("captcha_required", suspended: true);
+                }
+
+                // Follow redirect manually for non-captcha redirects
+                using var followRequest = CreateGetRequest(
+                    location.StartsWith("http") ? location : _baseUrl + location);
+                response = await _httpClient.SendAsync(followRequest, ct);
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+            }
 
             var html = await response.Content.ReadAsStringAsync(ct);
+
+            // Also check response body for captcha indicators
+            if (html.Contains("/sp/captcha", StringComparison.OrdinalIgnoreCase)
+                || html.Contains("captcha", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Warning("{Engine}: CAPTCHA detected in response body", Name);
+                return CreateErrorResult("captcha_required", suspended: true);
+            }
+
             return ParseResults(html);
         }
         catch (TaskCanceledException)
@@ -380,6 +447,22 @@ public partial class StartpageSearchEngine : SearchEngineBase
             var url = _baseUrl + "/";
             using var request = CreateGetRequest(url);
             var response = await _httpClient.SendAsync(request, ct);
+
+            // Check for captcha redirect during sc-code fetch (SearXNG checks this)
+            if (response.StatusCode == HttpStatusCode.Found
+                || response.StatusCode == HttpStatusCode.Redirect)
+            {
+                var location = response.Headers.Location?.ToString() ?? "";
+                if (location.Contains("captcha", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.Warning("{Engine}: CAPTCHA during sc-code fetch", Name);
+                    return null;
+                }
+                // Follow redirect
+                using var followRequest = CreateGetRequest(
+                    location.StartsWith("http") ? location : _baseUrl + location);
+                response = await _httpClient.SendAsync(followRequest, ct);
+            }
 
             if (!response.IsSuccessStatusCode)
                 return null;
